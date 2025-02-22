@@ -62,7 +62,8 @@ class DaimoPay(BasePaymentProvider):
                     "DAIMO_PAY_REFUND_EOA_PRIVATE_KEY",
                     forms.CharField(
                         label=_("Refund EOA Private Key"),
-                        help_text=_("Private key for the EOA to send automated refunds. Must be funded with both ETH (for gas) and DAI (for refunds) on Optimism."),
+                        help_text=_("Private key for the EOA to send automated refunds. Must be funded with both ETH (for gas) and DAI (for refunds) on Optimism. If empty, automated refunds will not be available."),
+                        required=False
                     ),
                 )
             ]
