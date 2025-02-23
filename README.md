@@ -21,7 +21,6 @@ Key features:
 
 3. Configure the following required settings:
    - `DAIMO_PAY_API_KEY` - API key from pay.daimo.com
-   - `DAIMO_PAY_WEBHOOK_TOKEN` - Webhook token for verifying callbacks
    - `DAIMO_PAY_RECIPIENT_ADDRESS` - Address to receive payments (in DAI on Optimism)
    - `DAIMO_PAY_REFUND_EOA_PRIVATE_KEY` - Private key for automated refunds (must be funded with ETH and DAI on Optimism)
 

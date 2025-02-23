@@ -45,13 +45,6 @@ class DaimoPay(BasePaymentProvider):
                     ),
                 ),
                 (
-                    "DAIMO_PAY_WEBHOOK_TOKEN",
-                    forms.CharField(
-                        label=_("Daimo Pay Webhook Token"),
-                        help_text=_("Token for verifying webhook requests. Webhook endpoint: https://[pretix url]/webhook"),
-                    ),
-                ),
-                (
                     "DAIMO_PAY_RECIPIENT_ADDRESS",
                     forms.CharField(
                         label=_("Recipient Address"),
@@ -76,10 +69,6 @@ class DaimoPay(BasePaymentProvider):
         if not api_key_configured:
             logger.error("Daimo Pay API key not configured")
 
-        webhook_secret_configured = bool(self.settings.DAIMO_PAY_WEBHOOK_TOKEN)
-        if not webhook_secret_configured:
-            logger.error("Daimo Pay webhook secret not configured")
-
         recipient_address_configured = bool(self.settings.DAIMO_PAY_RECIPIENT_ADDRESS)
         if not recipient_address_configured:
             logger.error("Daimo Pay recipient address not configured")
@@ -89,7 +78,6 @@ class DaimoPay(BasePaymentProvider):
 
         return all((
             api_key_configured,
-            webhook_secret_configured,
             recipient_address_configured,
             super().is_allowed(request, **kwargs),
         ))
