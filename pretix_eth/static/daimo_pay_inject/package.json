@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "src/index.ts",
   "scripts": {
-    "build": "esbuild src/index.tsx --outfile=dist/index.js --bundle",
+    "build": "esbuild src/index.tsx --outfile=dist/index.js --metafile=dist/meta.json --bundle --minify",
     "dev": "esbuild src/index.tsx --outfile=dist/index.js --bundle --watch",
     "test": "tsc"
   },

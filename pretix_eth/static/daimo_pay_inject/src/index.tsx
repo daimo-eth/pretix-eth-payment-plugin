@@ -23,13 +23,16 @@ function Injector() {
 
   useEffect(() => {
     // Set payment ID immediately
-    context.paymentState.setPayId(window["payment_id"] as any);
+    const payId = window["payment_id"] as string;
+    context.paymentState.setPayId(payId);
 
     // On click, show the payment modal
     const placeOrderButton = document.querySelector(
       'button.btn-primary[type="submit"]'
     ) as HTMLButtonElement;
     console.log(`Enabling place order button`, placeOrderButton);
+    console.log(`Setting data-pay-id to ${payId}`);
+    placeOrderButton.dataset.payId = payId;
     placeOrderButton.disabled = false;
     placeOrderButton.onclick = (e) => {
       e.preventDefault(); // Prevent submit

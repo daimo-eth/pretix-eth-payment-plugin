@@ -17,7 +17,9 @@
     window.clearInterval(interval);
     console.log("Replacing the 'Place binding order' button");
     btn.textContent = "Place order";
-    btn.disabled = true;
+    if (!btn.dataset.payId) {
+      btn.disabled = true;
+    }
   }, 25);
 </script>
 
