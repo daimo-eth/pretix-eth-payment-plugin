@@ -13,7 +13,7 @@ from django_scopes import scope
 from django.contrib import messages
 from django.utils.translation import gettext_lazy as _
 
-from pretix.base.models import Order, OrderPayment
+from pretix.base.models import Organizer, OrderPayment
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -23,24 +23,19 @@ from rest_framework import permissions, mixins
 logger = logging.getLogger(__name__)
 
 
-def verify_webhook_signature(request, secret):
+def verify_webhook(request, expected_token):
     """Verify Daimo Pay webhook signature"""
-    signature = request.headers.get('Authorization')
-    if not signature:
+    auth_token = request.headers.get('Authorization')
+    if not auth_token:
         return False
         
-    # Remove 'Bearer ' prefix if present
-    if signature.startswith('Bearer '):
-        signature = signature[7:]
+    # Remove Bearer prefix if present
+    if auth_token.startswith('Bearer: '):
+        auth_token = auth_token[8:]
 
-    # Calculate expected signature
-    expected = hmac.new(
-        secret.encode(),
-        request.body,
-        hashlib.sha256
-    ).hexdigest()
+    print(f"WEBHOOK: tok {auth_token} exp {expected_token}")
 
-    return hmac.compare_digest(signature, expected)
+    return auth_token == expected_token
 
 
 @csrf_exempt
@@ -48,21 +43,17 @@ def verify_webhook_signature(request, secret):
 def daimo_webhook(request, *args, **kwargs):
     """Handle Daimo Pay webhook events"""
     try:
-        print(f"WEBHOOK RECEIVED: {request.body}")
-
         # Parse webhook payload
         payload = json.loads(request.body)
         event_type = payload.get('type')
         payment_id = payload.get('paymentId')
-
-
+        print(f"WEBHOOK RECEIVED: {event_type} {payment_id}")
         if not event_type or not payment_id:
             return HttpResponseBadRequest("Missing event type or payment ID")
+        if event_type != 'payment_completed':
+            return HttpResponse(status=200)
 
         # Find payment and its organizer
-        from pretix.base.models import Organizer
-        from django_scopes import scope, get_scope
-
         # Get all organizers since we can't scope the initial query
         organizers = Organizer.objects.all()
         payment = None
@@ -81,22 +72,20 @@ def daimo_webhook(request, *args, **kwargs):
                 except OrderPayment.DoesNotExist:
                     continue
 
-        print(f"WEBHOOK: found payment {payment.id}")
-
         if not payment:
             return HttpResponseBadRequest("Payment not found")
+
+        print(f"WEBHOOK: found payment {payment.id}")
 
         # Continue with the correct scope
         with scope(organizer=payment.order.event.organizer):
             # Verify webhook signature within the correct scope
-            if not verify_webhook_signature(request, payment.payment_provider.settings.DAIMO_PAY_WEBHOOK_SECRET):
-                return HttpResponseBadRequest("Invalid signature")
+            if not verify_webhook(request, payment.payment_provider.settings.DAIMO_PAY_WEBHOOK_TOKEN):
+                print(f"WEBHOOK: invalid token")
+                return HttpResponseBadRequest("Invalid token")
                 
             # Handle payment completion
-            if event_type == 'payment_completed':
-                payment.confirm()
-            elif event_type == 'payment_bounced':
-                payment.fail()
+            payment.payment_provider.confirm_payment_by_id(payment_id, payment)
                 
             return HttpResponse(status=200)
             
@@ -110,11 +99,4 @@ def daimo_webhook(request, *args, **kwargs):
 webhook_patterns = [
     path('webhook/', daimo_webhook, name='webhook'),
 ]
-
-# URL configuration
-webhook_patterns = [
-    path('webhook/', daimo_webhook, name='webhook'),
-]
-
-
 # No views needed beyond webhook handler

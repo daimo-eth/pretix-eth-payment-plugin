@@ -45,10 +45,10 @@ class DaimoPay(BasePaymentProvider):
                     ),
                 ),
                 (
-                    "DAIMO_PAY_WEBHOOK_SECRET",
+                    "DAIMO_PAY_WEBHOOK_TOKEN",
                     forms.CharField(
-                        label=_("Daimo Pay Webhook Secret"),
-                        help_text=_("Secret token for verifying webhook requests"),
+                        label=_("Daimo Pay Webhook Token"),
+                        help_text=_("Token for verifying webhook requests. Webhook endpoint: https://[pretix url]/webhook"),
                     ),
                 ),
                 (
@@ -72,24 +72,15 @@ class DaimoPay(BasePaymentProvider):
 
     # Validate config
     def is_allowed(self, request, **kwargs):
-        api_key_configured = bool(
-            self.settings.DAIMO_PAY_API_KEY is not None
-            and len(self.settings.DAIMO_PAY_API_KEY) > 0
-        )
+        api_key_configured = bool(self.settings.DAIMO_PAY_API_KEY)
         if not api_key_configured:
             logger.error("Daimo Pay API key not configured")
 
-        webhook_secret_configured = bool(
-            self.settings.DAIMO_PAY_WEBHOOK_SECRET is not None
-            and len(self.settings.DAIMO_PAY_WEBHOOK_SECRET) > 0
-        )
+        webhook_secret_configured = bool(self.settings.DAIMO_PAY_WEBHOOK_TOKEN)
         if not webhook_secret_configured:
             logger.error("Daimo Pay webhook secret not configured")
 
-        recipient_address_configured = bool(
-            self.settings.DAIMO_PAY_RECIPIENT_ADDRESS is not None
-            and len(self.settings.DAIMO_PAY_RECIPIENT_ADDRESS) > 0
-        )
+        recipient_address_configured = bool(self.settings.DAIMO_PAY_RECIPIENT_ADDRESS)
         if not recipient_address_configured:
             logger.error("Daimo Pay recipient address not configured")
         elif not Web3.is_address(self.settings.DAIMO_PAY_RECIPIENT_ADDRESS):
@@ -171,17 +162,20 @@ class DaimoPay(BasePaymentProvider):
     def execute_payment(self, request: HttpRequest, payment: OrderPayment):
         payment_id = request.session['payment_id']
         print(f"execute_payment: {payment_id}")
+        self.confirm_payment_by_id(payment_id, payment)
 
+    def confirm_payment_by_id(self, payment_id: str, payment: OrderPayment) -> None:
         # Ensure that it's paid
-        # TODO: save source chain ID, not just tx_hash.
-        source_tx_hash, dest_tx_hash = self._get_daimo_pay_tx_hash(payment_id)
-        print(f"execute_payment: {payment_id}: tx hashes {source_tx_hash} {dest_tx_hash}")
+        source_chain_id, source_tx_hash, dest_chain_id, dest_tx_hash = self._fetch_payment_by_id(payment_id)
+        print(f"confirm_payment_by_id: {payment_id}: source {source_chain_id}-{source_tx_hash}, dest {dest_chain_id}-{dest_tx_hash}")
         if source_tx_hash != None:
             payment.confirm()
             payment.info_data = {
                 "payment_id": payment_id,
                 "source_tx_hash": source_tx_hash,
                 "dest_tx_hash": dest_tx_hash,
+                "source_chain_id": source_chain_id,
+                "dest_chain_id": dest_chain_id,
                 "amount": str(payment.amount),
                 "time": int(time.time()),
             }
@@ -189,8 +183,8 @@ class DaimoPay(BasePaymentProvider):
         else:
             print(f"execute_payment: {payment_id}: FAIL, not finished according to Daimo Pay API")
             payment.fail()
-    
-    def _get_daimo_pay_tx_hash(self, payment_id: str):
+
+    def _fetch_payment_by_id(self, payment_id: str):
         response = requests.get(
             f"https://pay.daimo.com/api/payment/{payment_id}",
             headers={
@@ -201,15 +195,15 @@ class DaimoPay(BasePaymentProvider):
         if response.status_code != 200:
             raise Exception(f"Daimo Pay API error: {response.text}")
 
-        # TODO: clean up response typing
+        # See https://paydocs.daimo.com/payments-api#retrieve-a-payment-by-id
         print(repr(data))
-        order = data['order']
-
-        source_tx_hash = order.get('sourceInitiateTxHash')
-        dest_tx_hash = order.get('destFastFinishTxHash')
-        if dest_tx_hash is None:
-            dest_tx_hash = order['destClaimTxHash']
-        return source_tx_hash, dest_tx_hash
+        source = data['source']
+        dest = data['destination']
+        source_chain_id = source['chainId']
+        source_tx_hash = source['txHash']
+        dest_chain_id = dest['chainId']
+        dest_tx_hash = dest['txHash']
+        return source_chain_id, source_tx_hash, dest_chain_id, dest_tx_hash
 
     # Admin display: show order payment details
     def payment_control_render(self, request: HttpRequest, payment: OrderPayment):
